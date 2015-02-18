@@ -5,8 +5,10 @@ using System.Linq;
 using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
+using System.Reflection;
 using System.Threading.Tasks;
 using System.Xml;
+using Exceptions;
 using SendGrid.SmtpApi;
 
 // ReSharper disable MemberCanBePrivate.Global
@@ -21,18 +23,30 @@ namespace SendGrid
 		public const String Endpoint = "/api/mail.send";
 
 		private readonly NetworkCredential _credentials;
+	    private readonly TimeSpan _timeout;
 
 		#endregion
 
 		/// <summary>
-		///     Creates a new Web interface for sending mail.  Preference is using the Factory method.
+		///     Creates a new Web interface for sending mail
 		/// </summary>
 		/// <param name="credentials">SendGridMessage user parameters</param>
-		/// <param name="https">Use https?</param>
 		public Web(NetworkCredential credentials)
 		{
 			_credentials = credentials;
+		    _timeout = TimeSpan.FromSeconds(100);
 		}
+
+        /// <summary>
+        ///     Creates a new Web interface for sending mail.
+        /// </summary>
+        /// <param name="credentials">SendGridMessage user parameters</param>
+        /// <param name="httpTimeout">HTTP request timeout</param>
+	    public Web(NetworkCredential credentials, TimeSpan httpTimeout)
+	    {
+            _credentials = credentials;
+	        _timeout = httpTimeout;
+	    }
 
 		/// <summary>
 		///     Delivers a message over SendGrid's Web interface
@@ -40,10 +54,13 @@ namespace SendGrid
 		/// <param name="message"></param>
 		public void Deliver(ISendGrid message)
 		{
-			var client = new HttpClient
-			{
-				BaseAddress = new Uri("https://" + BaseUrl)
-			};
+            var client = new HttpClient();
+
+            client.BaseAddress = new Uri("https://" + BaseUrl);
+		    client.Timeout = _timeout;
+
+            var version = Assembly.GetExecutingAssembly().GetName().Version.ToString();
+            client.DefaultRequestHeaders.TryAddWithoutValidation("User-Agent", "sendgrid/" + version + ";csharp");
 
 			var content = new MultipartFormDataContent();
 			AttachFormParams(message, content);
@@ -56,21 +73,24 @@ namespace SendGrid
 		///     Asynchronously delivers a message over SendGrid's Web interface
 		/// </summary>
 		/// <param name="message"></param>
-        public async Task DeliverAsync(ISendGrid message)
-        {
-            var client = new HttpClient
-            {
-                BaseAddress = new Uri("https://" + BaseUrl)
-            };
+		public async Task DeliverAsync(ISendGrid message)
+		{
+		    var client = new HttpClient();
+            
+		    client.BaseAddress = new Uri("https://" + BaseUrl);
+		    client.Timeout = _timeout;
 
-            var content = new MultipartFormDataContent();
-            AttachFormParams(message, content);
-            AttachFiles(message, content);
-            var response = await client.PostAsync(Endpoint + ".xml", content);
-            await CheckForErrorsAsync(response);
-        }
+            var version = Assembly.GetExecutingAssembly().GetName().Version.ToString();
+            client.DefaultRequestHeaders.TryAddWithoutValidation("User-Agent", "sendgrid/" + version + ";csharp");
 
-		#region Support Methods
+			var content = new MultipartFormDataContent();
+			AttachFormParams(message, content);
+			AttachFiles(message, content);
+			var response = await client.PostAsync(Endpoint + ".xml", content);
+			await CheckForErrorsAsync(response);
+		}
+
+	    #region Support Methods
 
 		private void AttachFormParams(ISendGrid message, MultipartFormDataContent content)
 		{
@@ -118,15 +138,16 @@ namespace SendGrid
 
 		private static void CheckForErrors(HttpResponseMessage response)
 		{
-			//transport error
-			if (response.StatusCode != HttpStatusCode.OK)
-			{
-				throw new Exception(response.ReasonPhrase);
-			}
-
 			var content = response.Content.ReadAsStreamAsync().Result;
+			var errors = GetErrorsInResponse(content);
 
-			FindErrorsInResponse(content);
+			// API error
+			if (errors.Any())
+				throw new InvalidApiRequestException(response.StatusCode, errors, response.ReasonPhrase);
+
+			// Other error
+			if (response.StatusCode != HttpStatusCode.OK)
+				FindErrorsInResponse(content);
 		}
 
 		private static void FindErrorsInResponse(Stream content)
@@ -153,17 +174,26 @@ namespace SendGrid
 			}
 		}
 
+		private static string[] GetErrorsInResponse(Stream content)
+		{
+			var xmlDoc = new XmlDocument();
+			xmlDoc.Load(content);
+			return (from XmlNode errorNode in xmlDoc.SelectNodes("//error") select errorNode.InnerText).ToArray();
+		}
+
 		private static async Task CheckForErrorsAsync(HttpResponseMessage response)
 		{
-			//transport error
-			if (response.StatusCode != HttpStatusCode.OK)
-			{
-				throw new Exception(response.ReasonPhrase);
-			}
-
 			var content = await response.Content.ReadAsStreamAsync();
 
-			FindErrorsInResponse(content);
+		    var errors = GetErrorsInResponse(content);
+
+            // API error
+            if (errors.Any())
+                throw new InvalidApiRequestException(response.StatusCode, errors, response.ReasonPhrase);
+
+            // Other error
+            if (response.StatusCode != HttpStatusCode.OK)
+                FindErrorsInResponse(content);
 		}
 
 		internal List<KeyValuePair<String, String>> FetchFormParams(ISendGrid message)
@@ -189,6 +219,17 @@ namespace SendGrid
 					.Concat(message.To.ToList().Select(a => new KeyValuePair<String, String>("toname[]", a.DisplayName)))
 					.ToList();
 			}
+
+		    if (message.Cc != null)
+		    {
+		        result.AddRange(message.Cc.Select(c => new KeyValuePair<string, string>("cc[]", c.Address)));
+		    }
+
+		    if (message.Bcc != null)
+		    {
+		        result.AddRange(message.Bcc.Select(c => new KeyValuePair<string, string>("bcc[]", c.Address)));
+		    }
+            
 			if (message.GetEmbeddedImages().Count > 0) {
 				result = result.Concat(message.GetEmbeddedImages().ToList().Select(x => new KeyValuePair<String, String>(string.Format("content[{0}]", x.Key), x.Value)))
 					.ToList();
