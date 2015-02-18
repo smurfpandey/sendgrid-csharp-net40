@@ -1,21 +1,19 @@
 [![BuildStatus](https://travis-ci.org/sendgrid/sendgrid-csharp.png?branch=master)](https://travis-ci.org/sendgrid/sendgrid-csharp)
 
-See the [changelog](https://github.com/sendgrid/sendgrid-csharp/blob/master/CHANGELOG.md) for updates. 
-
 #Requirements
 
 This library requires .NET 4.0 and above.
 
 #Installation
 
-To use SendGrid in your C# project, you can either <a href="https://github.com/sendgrid/sendgrid-csharp.git">download the SendGrid C# .NET libraries directly from our Github repository</a> or, if you have the NuGet package manager installed, you can grab them automatically.
+To use SendGrid in your C# project, you can either <a href="https://github.com/smurfpandey/sendgrid-csharp-net40.git">download the SendGrid C# .NET libraries directly from our Github repository</a> or, if you have the NuGet package manager installed, you can grab them automatically.
 
 ```
 PM> Install-Package SendGrid 
 ```
 
 Once you have the SendGrid libraries properly referenced in your project, you can include calls to them in your code. 
-For a sample implementation, check the [Example](https://github.com/sendgrid/sendgrid-csharp/tree/master/SendGrid/Example) folder.
+For a sample implementation, check the [Example](https://github.com/smurfpandey/sendgrid-csharp-net40/tree/master/SendGrid/Example) folder.
 
 Add the following namespaces to use the library:
 ```csharp
