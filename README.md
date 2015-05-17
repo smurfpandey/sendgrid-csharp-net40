@@ -1,4 +1,4 @@
-[![BuildStatus](https://travis-ci.org/sendgrid/sendgrid-csharp.png?branch=master)](https://travis-ci.org/sendgrid/sendgrid-csharp)
+[![Build Status](https://travis-ci.org/smurfpandey/sendgrid-csharp-net40.svg)](https://travis-ci.org/smurfpandey/sendgrid-csharp-net40)
 
 #Requirements
 
